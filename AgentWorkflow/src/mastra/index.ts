@@ -1,3 +1,7 @@
+// Agents Imported
+import { extractionAgent_1 } from './agents/agent1/extractionAgent';
+import { extractionAgent_2 } from './agents/agent2/extractionAgent';
+// ---------------------------
 
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
@@ -11,7 +15,7 @@ import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } 
 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow },
-  agents: { weatherAgent },
+  agents: { weatherAgent, extractionAgent_1, extractionAgent_2 },
   scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },
   storage: new MastraCompositeStore({
     id: 'composite-storage',

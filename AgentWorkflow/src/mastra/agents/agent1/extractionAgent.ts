@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent'
 import { anthropic } from '@ai-sdk/anthropic'
 
 export const extractionAgent = new Agent({
-  id: 'extraction-agent',
+  id: 'extractionAgent_1',
   name: 'Extraction Agent',
   instructions: `
     You are an expert slide content analyst. 

@@ -1,6 +1,6 @@
 // Agents Imported
-import { extractionAgent_1 } from './agents/agent1/extractionAgent';
-import { extractionAgent_2 } from './agents/agent2/extractionAgent';
+import { extractionAgent as extractionAgent_1 } from './agents/agent1/extractionAgent';
+import { extractionAgent as extractionAgent_2 } from './agents/agent2/extractionAgent';
 // ---------------------------
 
 import { Mastra } from '@mastra/core/mastra';

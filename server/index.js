@@ -11,6 +11,8 @@ const io = new Server(server, {
   maxHttpBufferSize: 1e8,
 });
 
+app.use(express.json({ limit: '50mb' }));
+
 function getLocalIP() {
   const interfaces = os.networkInterfaces();
   for (const name of Object.keys(interfaces)) {
@@ -21,44 +23,32 @@ function getLocalIP() {
   return 'localhost';
 }
 
-// Store slides as array of base64 strings + current index
-let session = { slides: [], currentSlide: 0 };
+let session = {
+  slides: [],
+  currentSlide: 0,
+  questions: [], // { id, text, slideIndex, ts, done }
+};
 
-app.get('/info', (req, res) => {
-  res.json({ ip: getLocalIP(), port: 3001 });
-});
+function broadcastQuestions() {
+  io.emit('questions-update', session.questions);
+}
 
-// Serve student HTML
-app.get('/student', (req, res) => {
-  res.sendFile(path.join(__dirname, 'student.html'));
-});
+app.get('/', (req, res) => res.redirect('/student'));
+app.get('/info', (req, res) => res.json({ ip: getLocalIP(), port: 3001 }));
+app.get('/student', (req, res) => res.sendFile(path.join(__dirname, 'student.html')));
 
-// Serve individual slides via HTTP — no more pushing huge payloads through sockets
 app.get('/slide/:index', (req, res) => {
-  const index = parseInt(req.params.index);
-  const slide = session.slides[index];
+  const slide = session.slides[parseInt(req.params.index)];
   if (!slide) return res.status(404).send('Not found');
-
-  // slide is a data URL like "data:image/png;base64,..."
-  const base64Data = slide.replace(/^data:image\/\w+;base64,/, '');
-  const imgBuffer = Buffer.from(base64Data, 'base64');
   res.setHeader('Content-Type', 'image/png');
-  res.send(imgBuffer);
-});
-
-// Serve slide count so student knows how many slides exist
-app.get('/slides/count', (req, res) => {
-  res.json({ count: session.slides.length, current: session.currentSlide });
+  res.send(Buffer.from(slide.replace(/^data:image\/\w+;base64,/, ''), 'base64'));
 });
 
 io.on('connection', (socket) => {
-  // Send current state (lightweight — just index + count, no image data)
   if (session.slides.length > 0) {
-    socket.emit('session', {
-      count: session.slides.length,
-      currentSlide: session.currentSlide,
-    });
+    socket.emit('session', { count: session.slides.length, currentSlide: session.currentSlide });
   }
+  socket.emit('questions-update', session.questions);
 
   socket.on('upload-slides', (slides) => {
     session.slides = slides;
@@ -70,12 +60,37 @@ io.on('connection', (socket) => {
     session.currentSlide = index;
     io.emit('slide-change', index);
   });
+
+  // Student asks a question
+  socket.on('submit-question', (text) => {
+    if (!text?.trim()) return;
+    const question = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      text: text.trim(),
+      slideIndex: session.currentSlide,
+      ts: Date.now(),
+      done: false,
+    };
+    session.questions.unshift(question);
+    broadcastQuestions();
+  });
+
+  // Teacher dismisses a question
+  socket.on('dismiss-question', (id) => {
+    session.questions = session.questions.filter(q => q.id !== id);
+    broadcastQuestions();
+  });
+
+  // Teacher clears all
+  socket.on('clear-questions', () => {
+    session.questions = [];
+    broadcastQuestions();
+  });
 });
 
 server.listen(3001, '0.0.0.0', () => {
   const ip = getLocalIP();
   console.log(`\n✅ Server ready`);
   console.log(`   Teacher app:  http://localhost:3001`);
-  console.log(`   Student view: http://${ip}:3001/student`);
-  console.log(`\n   👆 Use this URL in your QR code!\n`);
+  console.log(`   Student view: http://${ip}:3001/student\n`);
 });

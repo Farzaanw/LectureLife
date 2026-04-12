@@ -5,17 +5,35 @@ import workerSrc from "pdfjs-dist/build/pdf.worker.min?url";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
 
-/* BACKGROUND */
+/* BACKGROUND + ANIMATION */
 const bg = css`
-  background: linear-gradient(160deg, #fdeae6 0%, #f7cfc5 40%, #efb2a4 100%);
+  background: linear-gradient(180deg, #fcebea 0%, #f7cfc5 60%, #f4b6a8 100%);
   min-height: 100vh;
   position: relative;
+
+  @keyframes float1 {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-20px); }
+    100% { transform: translateY(0px); }
+  }
+
+  @keyframes float2 {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(15px); }
+    100% { transform: translateY(0px); }
+  }
 `;
 
-/* LEAF */
-const Leaf = ({ style }) => (
+/* LEAF WITH ANIMATION */
+const Leaf = ({ style, variant = 1 }) => (
   <svg
-    style={{ position: "fixed", opacity: 0.15, pointerEvents: "none", ...style }}
+    style={{
+      position: "fixed",
+      opacity: 0.12,
+      pointerEvents: "none",
+      animation: `${variant === 1 ? "float1" : "float2"} 6s ease-in-out infinite`,
+      ...style,
+    }}
     width="50"
     height="80"
     viewBox="0 0 48 80"
@@ -129,83 +147,78 @@ export default function LectureLife() {
   };
 
   return (
-    <div css={bg} className="p-6 flex gap-6">
-      {/* LEAVES */}
+    <div css={bg} className="p-6">
+
+      {/* 🌿 MORE LEAVES WITH MOTION */}
       <Leaf style={{ top: "10%", left: "5%" }} />
-      <Leaf style={{ top: "30%", right: "5%" }} />
+      <Leaf style={{ top: "30%", right: "5%" }} variant={2} />
       <Leaf style={{ bottom: "10%", left: "10%" }} />
 
-      {/* LEFT SIDE */}
-      <div className="flex-1">
-        {/* HEADER */}
-        <div className="flex justify-between mb-8">
-          <h1 className="text-2xl font-bold text-orange-600">LectureLife</h1>
+      {/* NEW ONES */}
+      <Leaf style={{ top: "60%", left: "3%" }} variant={2} />
+      <Leaf style={{ top: "75%", right: "6%" }} />
+      <Leaf style={{ bottom: "25%", right: "3%" }} variant={2} />
 
-          {images.length > 0 && (
-            <button
-              onClick={resetApp}
-              className="px-4 py-2 bg-gray-200 rounded-full text-gray-700 hover:bg-gray-300"
-            >
-              ← Back
-            </button>
-          )}
-        </div>
+      {/* HEADER */}
+      <div className="flex justify-between mb-8">
+        <h1 className="text-2xl font-bold text-orange-600">LectureLife</h1>
 
-        {/* SPINNER */}
-        {loading && <Spinner />}
-
-        {/* UPLOAD */}
-        {!loading && images.length === 0 && (
-          <div className="max-w-3xl mx-auto">
-            <label className="block border-2 border-dashed border-orange-300 rounded-2xl p-16 text-center bg-white cursor-pointer">
-              <p className="text-orange-600 font-semibold text-lg">
-                Drop your lecture recording here
-              </p>
-              <p className="text-sm text-gray-400 mt-2">
-                or click to browse • PDF only
-              </p>
-              <input type="file" onChange={handleUpload} className="hidden" />
-            </label>
-
-            <button className="w-full mt-6 bg-orange-600 text-white py-4 rounded-xl">
-              ✦ Transform & Go Live
-            </button>
-          </div>
-        )}
-
-        {/* SLIDES */}
-        {!loading && images.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-            {images.map((img, i) => (
-              <div key={i} className="relative group">
-                <img src={img} className="rounded-xl shadow" />
-
-                <button
-                  onClick={() => enhanceSlide(img)}
-                  className="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full text-white text-xs opacity-0 group-hover:opacity-100"
-                  style={{
-                    background: "linear-gradient(135deg,#e05c2a,#f0945c)",
-                  }}
-                >
-                  ✦ Enhance
-                </button>
-              </div>
-            ))}
-          </div>
+        {images.length > 0 && (
+          <button
+            onClick={resetApp}
+            className="px-4 py-2 bg-gray-200 rounded-full text-gray-700 hover:bg-gray-300"
+          >
+            ← Back
+          </button>
         )}
       </div>
 
-      {/* RIGHT CHAT PANEL */}
+      {loading && <Spinner />}
+
+      {!loading && images.length === 0 && (
+        <div className="max-w-3xl mx-auto">
+          <label className="block border-2 border-dashed border-orange-300 rounded-2xl p-16 text-center bg-white cursor-pointer">
+            <p className="text-orange-600 font-semibold text-lg">
+              Drop your lecture recording here
+            </p>
+            <p className="text-sm text-gray-400 mt-2">
+              or click to browse • PDF only
+            </p>
+            <input type="file" onChange={handleUpload} className="hidden" />
+          </label>
+
+          <button className="w-full mt-6 bg-orange-600 text-white py-4 rounded-xl">
+            ✦ Transform & Go Live
+          </button>
+        </div>
+      )}
+
+      {!loading && images.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+          {images.map((img, i) => (
+            <div key={i} className="relative group">
+              <img src={img} className="rounded-xl shadow" />
+
+              <button
+                onClick={() => enhanceSlide(img)}
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full text-white text-xs opacity-0 group-hover:opacity-100"
+                style={{
+                  background: "linear-gradient(135deg,#e05c2a,#f0945c)",
+                }}
+              >
+                ✦ Enhance
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {chatContent && (
-        <div className="w-80 bg-white p-4 rounded-xl shadow sticky top-6 h-fit">
+        <div className="fixed right-6 top-20 w-80 bg-white p-4 rounded-xl shadow">
           <h3 className="text-orange-600 font-semibold mb-3">AI Assistant</h3>
 
           {chatContent.image && (
-            <img
-              src={chatContent.image}
-              alt="Slide"
-              className="rounded-lg mb-3"
-            />
+            <img src={chatContent.image} className="rounded-lg mb-3" />
           )}
 
           {chatContent.status === "loading" && (

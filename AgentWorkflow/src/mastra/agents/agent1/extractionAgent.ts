@@ -21,5 +21,5 @@ export const extractionAgent = new Agent({
     - visualAsset: A detailed description of any charts, diagrams, or images.
     - rawContent: The core bullet points exactly as they appear.
   `,
-  model: anthropic('claude-haiku-4-5'),
+  model: anthropic('claude-sonnet-4-5'),
 })

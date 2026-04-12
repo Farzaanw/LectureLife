@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>uiSpec React Test</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+      body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #f3f4f6; color: #111827; }
+      .wrap { max-width: 1100px; margin: 20px auto; padding: 0 16px; display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
+      .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; }
+      textarea { width: 100%; min-height: 560px; font-size: 12px; font-family: ui-monospace, monospace; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px; }
+      .slide { border: 2px solid #d1d5db; border-radius: 12px; min-height: 560px; padding: 16px; background: #fff; }
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+      .chip { background: #eef2ff; color: #3730a3; font-size: 12px; border-radius: 999px; padding: 4px 8px; }
+      .box { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; margin-bottom: 8px; }
+      .label { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; }
+      .btn { margin-top: 8px; padding: 10px 12px; border: none; background: #111827; color: #fff; border-radius: 8px; cursor: pointer; }
+      .opt { display: block; width: 100%; margin-top: 6px; padding: 8px; text-align: left; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; }
+      .correct { background: #ecfdf5; border-color: #16a34a; }
+      .wrong { background: #fef2f2; border-color: #dc2626; }
+      .error { color: #b91c1c; margin-top: 8px; white-space: pre-wrap; font-size: 12px; }
+      @media (max-width: 900px) { .wrap { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const sample = {
+        "version": "1.0",
+        "mode": "QuizReact",
+        "title": "TCP: Transmission Control Protocol",
+        "theme": {
+        "primaryColor": "#1a73e8",
+        "fontTitle": "Google Sans",
+        "fontBody": "Roboto"
+        },
+        "elements": [
+        {
+            "type": "ADD_TEXT_BOX",
+            "content": "💡 Think of TCP like a certified mail service - it confirms delivery!",
+            "animation": "FADE_IN",
+            "order": 1
+        },
+        {
+            "type": "ADD_SHAPE",
+            "content": "Connection-Oriented",
+            "animation": "FLY_IN_FROM_LEFT",
+            "order": 2
+        },
+        {
+            "type": "ADD_SHAPE",
+            "content": "Reliable Delivery",
+            "animation": "FLY_IN_FROM_LEFT",
+            "order": 3
+        },
+        {
+            "type": "ADD_SPEAKER_NOTES",
+            "content": "Start by asking students: 'What happens when you send a text message and want to know it was delivered?' Connect this to TCP's reliability. Emphasize that TCP is like having a conversation with confirmation at each step, unlike UDP which is like shouting into a crowd. Walk through the state diagram slowly, pointing out how both sides coordinate. Highlight that the three-way handshake is like a phone call: 'Hello?' 'Hello, is this you?' 'Yes, let's talk!'"
+        }
+        ],
+        "interaction": {
+        "type": "QUIZ",
+        "items": [
+            {
+            "question": "What is the correct order of the TCP three-way handshake?",
+            "options": [
+                "SYN, SYN-ACK, ACK",
+                "ACK, SYN, SYN-ACK",
+                "SYN, ACK, SYN-ACK",
+                "CONNECT, CONFIRM, ACKNOWLEDGE"
+            ],
+            "answer": "SYN, SYN-ACK, ACK"
+            },
+            {
+            "question": "Which TCP mechanism prevents the sender from overwhelming the receiver's buffer?",
+            "options": [
+                "Sliding Window (Flow Control)",
+                "Congestion Control",
+                "Three-Way Handshake",
+                "Checksum Validation"
+            ],
+            "answer": "Sliding Window (Flow Control)"
+            },
+            {
+            "question": "What is the data unit called in TCP?",
+            "options": [
+                "Segment",
+                "Packet",
+                "Frame",
+                "Datagram"
+            ],
+            "answer": "Segment"
+            },
+            {
+            "question": "Which feature ensures TCP detects errors in transmitted data?",
+            "options": [
+                "Checksums",
+                "Sequence numbers",
+                "Port numbers",
+                "IP addresses"
+            ],
+            "answer": "Checksums"
+            },
+            {
+            "question": "What does TCP's congestion control mechanism prevent?",
+            "options": [
+                "Network collapse from too much traffic",
+                "Data corruption during transmission",
+                "Unauthorized access to data",
+                "Loss of connection during handshake"
+            ],
+            "answer": "Network collapse from too much traffic"
+            }
+        ]
+        },
+        "speakerNotes": "Start by asking students: 'What happens when you send a text message and want to know it was delivered?' Connect this to TCP's reliability. Emphasize that TCP is like having a conversation with confirmation at each step, unlike UDP which is like shouting into a crowd. Walk through the state diagram slowly, pointing out how both sides coordinate. Highlight that the three-way handshake is like a phone call: 'Hello?' 'Hello, is this you?' 'Yes, let's talk!'"
+      };
+
+      function Quiz({ items }) {
+        const [answers, setAnswers] = React.useState({});
+        return (
+          <div>
+            {(items || []).map((q, qi) => (
+              <div key={qi} className="box">
+                <div><strong>{qi + 1}. {q.question}</strong></div>
+                {(q.options || []).map((opt, oi) => {
+                  const picked = answers[qi];
+                  let cls = 'opt';
+                  if (picked) {
+                    if (opt === q.answer) cls += ' correct';
+                    else if (opt === picked) cls += ' wrong';
+                  }
+                  return (
+                    <button key={oi} className={cls} onClick={() => setAnswers((a) => ({ ...a, [qi]: opt }))}>
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        );
+      }
+
+      function Slide({ spec }) {
+        const color = spec.theme?.primaryColor || '#1a73e8';
+        return (
+          <div className="slide" style={{ borderColor: color }}>
+            <h2 style={{ margin: 0, color, fontFamily: spec.theme?.fontTitle || 'Inter' }}>{spec.title || 'Untitled'}</h2>
+            <div className="chips">
+              <span className="chip">Mode: {spec.mode}</span>
+              <span className="chip">Type: {spec.interaction?.type || 'NONE'}</span>
+            </div>
+
+            {(spec.elements || []).map((e, i) => (
+              <div className="box" key={i}>
+                <div className="label">{e.type} {e.order ? `#${e.order}` : ''}</div>
+                <div>{e.content}</div>
+              </div>
+            ))}
+
+            {spec.interaction?.type === 'QUIZ' ? <Quiz items={spec.interaction?.items} /> : null}
+
+            <div className="box">
+              <div className="label">Speaker Notes</div>
+              <div>{spec.speakerNotes || 'None'}</div>
+            </div>
+          </div>
+        );
+      }
+
+      function App() {
+        const [jsonText, setJsonText] = React.useState(JSON.stringify(sample, null, 2));
+        const [spec, setSpec] = React.useState(sample);
+        const [error, setError] = React.useState('');
+
+        const render = () => {
+          setError('');
+          try {
+            const parsed = JSON.parse(jsonText);
+            setSpec(parsed);
+          } catch (e) {
+            setError('Invalid JSON: ' + e.message);
+          }
+        };
+
+        return (
+          <div className="wrap">
+            <section className="panel">
+              <h3 style={{ marginTop: 0 }}>Paste uiSpec JSON</h3>
+              <textarea value={jsonText} onChange={(e) => setJsonText(e.target.value)} />
+              <button className="btn" onClick={render}>Render uiSpec</button>
+              {error ? <div className="error">{error}</div> : null}
+            </section>
+            <section className="panel">
+              <h3 style={{ marginTop: 0 }}>React Preview</h3>
+              <Slide spec={spec} />
+            </section>
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+  </body>
+</html>

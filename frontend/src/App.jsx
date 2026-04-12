@@ -197,6 +197,7 @@ export default function LectureLife() {
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [chatContent, setChatContent] = useState(null);
+  const [pendingImage, setPendingImage] = useState(null);
   const [presentMode, setPresentMode] = useState(false);
   const [studentUrl, setStudentUrl] = useState(null);
   const socketRef = useRef(null);
@@ -242,26 +243,65 @@ export default function LectureLife() {
     reader.readAsArrayBuffer(file);
   };
 
-  const enhanceSlide = async (img) => {
-    setChatContent({ status: "loading", image: img, text: null });
+  const enhanceSlide = (img) => {
+    setPendingImage(img);
+    setChatContent({
+      status: "select-mode",
+      image: img,
+      text: "What type of interactive style do you want?",
+    });
+  };
+
+  const sendToAgent1 = async (modeLabel) => {
+    if (!pendingImage) return;
+
+    const statusSteps = [
+      "Fetching data...",
+      "Parsing slide pixels...",
+      "Extracting content...",
+      "Detecting layout cues...",
+      "Mapping to interactive mode...",
+      "Drafting activity blocks...",
+    ];
+
+    setChatContent({
+      status: "loading",
+      image: pendingImage,
+      text: null,
+      lines: [statusSteps[0]],
+    });
+
+    const timers = statusSteps.slice(1).map((step, index) =>
+      setTimeout(() => {
+        setChatContent((prev) => {
+          if (!prev || prev.status !== "loading") return prev;
+          const existing = Array.isArray(prev.lines) ? prev.lines : [];
+          return { ...prev, lines: [...existing, step] };
+        });
+      }, 700 * (index + 1))
+    );
+
     try {
-      const jpegBase64 = img.replace("image/png", "image/jpeg").split(",")[1];
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("http://localhost:3333/api/agent1/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 500,
-          messages: [{ role: "user", content: [
-            { type: "image", source: { type: "base64", media_type: "image/jpeg", data: jpegBase64 } },
-            { type: "text", text: "Summarize this slide clearly with key points." },
-          ]}],
+          imageDataUrl: pendingImage,
+          interactionMode: modeLabel,
+          prompt: `Analyze this slide and output structured extraction that Agent 2 can directly use.\nUser selected mode: ${modeLabel}.`,
         }),
       });
-      const data = await res.json();
-      setChatContent({ status: "done", image: img, text: data.content?.[0]?.text || "No response" });
+
+      if (!res.ok) {
+        throw new Error("Backend error");
+      }
+
+      setChatContent({ status: "done", image: pendingImage, text: "Create interactive slide..." });
+      setPendingImage(null);
     } catch {
-      setChatContent({ status: "error", image: img, text: "Error analyzing slide" });
+      setChatContent({ status: "error", image: pendingImage, text: "Error sending to backend" });
+    } finally {
+      timers.forEach(clearTimeout);
     }
   };
 
@@ -338,7 +378,26 @@ export default function LectureLife() {
           <div className="w-80 bg-white p-4 rounded-xl shadow sticky top-6 h-fit">
             <h3 className="text-orange-600 font-semibold mb-3">AI Assistant</h3>
             {chatContent.image && <img src={chatContent.image} alt="Slide" className="rounded-lg mb-3" />}
-            {chatContent.status === "loading" && <p className="text-orange-400 animate-pulse">Analyzing slide...</p>}
+            {chatContent.status === "loading" && (
+              <div className="space-y-1">
+                {(Array.isArray(chatContent.lines) ? chatContent.lines : ["Working..."]).map((line, idx) => (
+                  <p key={idx} className="text-orange-400 animate-pulse text-sm">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            )}
+            {chatContent.status === "select-mode" && (
+              <div className="space-y-2">
+                <p className="text-sm text-gray-700">{chatContent.text}</p>
+                <div className="flex flex-col gap-2">
+                  <button onClick={() => sendToAgent1("Quiz")} className="px-3 py-2 rounded-lg bg-orange-100 text-orange-700">Quiz</button>
+                  <button onClick={() => sendToAgent1("Game")} className="px-3 py-2 rounded-lg bg-orange-100 text-orange-700">Game</button>
+                  <button onClick={() => sendToAgent1("Storymode / Walkthrough")} className="px-3 py-2 rounded-lg bg-orange-100 text-orange-700">Storymode / Walkthrough</button>
+                  <button onClick={() => sendToAgent1("Explore mode")} className="px-3 py-2 rounded-lg bg-orange-100 text-orange-700">Explore mode</button>
+                </div>
+              </div>
+            )}
             {chatContent.status === "done" && <p className="text-sm text-gray-700 whitespace-pre-wrap">{chatContent.text}</p>}
             {chatContent.status === "error" && <p className="text-red-500 text-sm">{chatContent.text}</p>}
           </div>

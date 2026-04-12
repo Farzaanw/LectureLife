@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LectureLife — Student View</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0f0f0f; min-height: 100vh;
+      display: flex; flex-direction: column;
+      font-family: -apple-system, sans-serif; color: white;
+    }
+
+    #header {
+      position: fixed; top: 0; left: 0; right: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 20px;
+      background: rgba(15,15,15,0.95);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      z-index: 100; backdrop-filter: blur(8px);
+    }
+    #logo { color: #f0945c; font-weight: 700; font-size: 17px; }
+    #counter { color: rgba(255,255,255,0.5); font-size: 13px; }
+    #status { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.5); }
+    #status.live { background: rgba(52,199,89,0.15); color: #34c759; }
+
+    #slide-area {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      padding: 80px 24px 100px;
+    }
+    #slide-img {
+      max-width: 100%; max-height: calc(100vh - 180px);
+      border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+      display: none; animation: fadeIn 0.25s ease-out;
+    }
+    #waiting { text-align: center; color: rgba(255,255,255,0.3); }
+    .dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      background: #f0945c; margin: 0 3px;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+
+    /* ── Question bar fixed at bottom ── */
+    #question-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      padding: 12px 16px;
+      background: rgba(15,15,15,0.97);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      backdrop-filter: blur(8px);
+      display: flex; gap: 10px; align-items: center;
+    }
+    #question-input {
+      flex: 1;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 22px;
+      padding: 11px 18px;
+      color: white; font-size: 14px; outline: none;
+      transition: border-color 0.2s;
+    }
+    #question-input::placeholder { color: rgba(255,255,255,0.25); }
+    #question-input:focus { border-color: rgba(240,148,92,0.6); }
+    #question-send {
+      width: 42px; height: 42px; border-radius: 50%;
+      background: #f0945c; border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background 0.15s, transform 0.1s;
+    }
+    #question-send:hover { background: #e07840; transform: scale(1.05); }
+    #question-send:active { transform: scale(0.95); }
+    #question-send:disabled { background: rgba(255,255,255,0.1); cursor: default; transform: none; }
+
+    /* ── Sent confirmation toast ── */
+    #toast {
+      position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: rgba(52,199,89,0.15); border: 1px solid rgba(52,199,89,0.3);
+      color: #34c759; padding: 8px 18px; border-radius: 999px;
+      font-size: 13px; font-weight: 500;
+      opacity: 0; transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none; white-space: nowrap;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @keyframes pulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1)} }
+    @keyframes fadeIn { from{opacity:0;transform:scale(.98)} to{opacity:1;transform:scale(1)} }
+  </style>
+</head>
+<body>
+
+  <div id="header">
+    <span id="logo">LectureLife</span>
+    <span id="counter">—</span>
+    <span id="status">Connecting…</span>
+  </div>
+
+  <div id="slide-area">
+    <div id="waiting">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      <p style="margin-top:16px;font-size:14px;">Waiting for teacher to start…</p>
+    </div>
+    <img id="slide-img" alt="Current slide" />
+  </div>
+
+  <div id="question-bar">
+    <input id="question-input" type="text" placeholder="Ask the teacher a question…" maxlength="200" />
+    <button id="question-send">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+    </button>
+  </div>
+
+  <div id="toast">✓ Question sent to teacher</div>
+
+  <script>
+    const socket = io(window.location.origin, { transports: ['polling', 'websocket'] });
+
+    const img    = document.getElementById('slide-img');
+    const waiting = document.getElementById('waiting');
+    const counter = document.getElementById('counter');
+    const status  = document.getElementById('status');
+    const input   = document.getElementById('question-input');
+    const sendBtn = document.getElementById('question-send');
+    const toast   = document.getElementById('toast');
+
+    let totalSlides = 0;
+
+    function showSlide(index) {
+      img.style.display = 'none';
+      waiting.style.display = 'none';
+      const url = `${window.location.origin}/slide/${index}?t=${Date.now()}`;
+      img.onload = () => {
+        img.style.display = 'block';
+        img.style.animation = 'none'; img.offsetHeight;
+        img.style.animation = 'fadeIn 0.25s ease-out';
+        counter.textContent = `Slide ${index + 1} / ${totalSlides}`;
+      };
+      img.onerror = () => { waiting.style.display = 'block'; setTimeout(() => showSlide(index), 1500); };
+      img.src = url;
+    }
+
+    socket.on('connect',      () => { status.textContent = 'Live'; status.className = 'live'; });
+    socket.on('disconnect',   () => { status.textContent = 'Disconnected'; status.className = ''; });
+    socket.on('session',      (d) => { totalSlides = d.count; showSlide(d.currentSlide); });
+    socket.on('slide-change', (i) => showSlide(i));
+
+    function showToast() {
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+
+    function sendQuestion() {
+      const text = input.value.trim();
+      if (!text) return;
+      socket.emit('submit-question', text);
+      input.value = '';
+      sendBtn.disabled = true;
+      showToast();
+      setTimeout(() => { sendBtn.disabled = false; }, 1500); // brief cooldown
+    }
+
+    sendBtn.addEventListener('click', sendQuestion);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); sendQuestion(); }
+    });
+  </script>
+</body>
+</html>

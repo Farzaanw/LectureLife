@@ -5,7 +5,7 @@ import workerSrc from "pdfjs-dist/build/pdf.worker.min?url";
 import { QRCodeCanvas } from "qrcode.react";
 import { io } from "socket.io-client";
 
-const STUDENT_SERVER_URL = import.meta.env.VITE_STUDENT_URL || "http://localhost:3001";
+const LOCAL_SERVER = "http://localhost:3001";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -81,6 +81,10 @@ function PresentIcon() {
 function PresentOverlay({ images, socket, studentUrl, onClose }) {
   const [current, setCurrent] = useState(0);
   const [showQR, setShowQR] = useState(true);
+  const [questions, setQuestions] = useState([]);
+  const [floatingBubble, setFloatingBubble] = useState(null); // { id, text } currently floating
+  const [landedIds, setLandedIds] = useState(new Set()); // ids that have completed animation
+  const prevQIds = useRef(new Set());
 
   const prev = useCallback(() => setCurrent((c) => Math.max(0, c - 1)), []);
   const next = useCallback(() => setCurrent((c) => Math.min(images.length - 1, c + 1)), [images.length]);
@@ -99,27 +103,85 @@ function PresentOverlay({ images, socket, studentUrl, onClose }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [next, prev, onClose]);
 
+  // Listen for incoming questions — show floating bubble for each new one
+  useEffect(() => {
+    if (!socket) return;
+    const handler = (qs) => {
+      setQuestions(qs);
+      // Find newly arrived questions
+      const incoming = qs.filter(q => !prevQIds.current.has(q.id));
+      if (incoming.length > 0) {
+        // Show the latest one as a floating bubble
+        const newest = incoming[0];
+        setFloatingBubble({ id: newest.id, text: newest.text });
+        // After float animation (~1.8s), mark as landed so it glows in the sidebar
+        setTimeout(() => {
+          setLandedIds(prev => new Set([...prev, newest.id]));
+          setFloatingBubble(null);
+        }, 2000);
+      }
+      qs.forEach(q => prevQIds.current.add(q.id));
+    };
+    socket.on("questions-update", handler);
+    return () => socket.off("questions-update", handler);
+  }, [socket]);
+
+  const dismissQuestion = (id) => {
+    if (socket) socket.emit("dismiss-question", id);
+    setLandedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+    prevQIds.current.delete(id);
+  };
+
+  const clearAll = () => {
+    if (socket) socket.emit("clear-questions");
+    setLandedIds(new Set());
+    prevQIds.current.clear();
+  };
+
+  const pendingCount = questions.length;
+
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#0f0f0f", display: "flex", flexDirection: "column" }}>
+
+      {/* FLOATING QUESTION BUBBLE */}
+      {floatingBubble && (
+        <div key={floatingBubble.id} style={{
+          position: "absolute", bottom: 100, left: "50%", transform: "translateX(-50%)",
+          zIndex: 2000, pointerEvents: "none",
+          animation: "bubbleFloat 2s cubic-bezier(0.4,0,0.6,1) forwards",
+        }}>
+          <div style={{
+            background: "linear-gradient(135deg, #f0945c, #e07840)",
+            color: "white", borderRadius: 20, padding: "14px 20px",
+            maxWidth: 340, fontSize: 15, fontWeight: 500, lineHeight: 1.45,
+            boxShadow: "0 12px 40px rgba(240,148,92,0.5), 0 0 0 1px rgba(255,255,255,0.1)",
+            position: "relative",
+          }}>
+            <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.7, display: "block", marginBottom: 5, letterSpacing: "0.08em" }}>✦ NEW QUESTION</span>
+            {floatingBubble.text}
+            <div style={{
+              position: "absolute", bottom: -7, left: "50%", transform: "translateX(-50%)",
+              width: 0, height: 0,
+              borderLeft: "7px solid transparent", borderRight: "7px solid transparent",
+              borderTop: "7px solid #e07840",
+            }} />
+          </div>
+        </div>
+      )}
+
       {/* TOP BAR */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", background: "rgba(255,255,255,0.05)", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
         <span style={{ color: "#f0945c", fontWeight: 700, fontSize: 18 }}>LectureLife</span>
-
         <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 14 }}>
           Slide <span style={{ color: "white", fontWeight: 600 }}>{current + 1}</span> / {images.length}
         </span>
-
         <div style={{ display: "flex", gap: 10 }}>
-          <button
-            onClick={() => setShowQR((v) => !v)}
-            style={{ padding: "7px 14px", borderRadius: 999, border: "1px solid rgba(240,148,92,0.5)", background: showQR ? "rgba(240,148,92,0.2)" : "transparent", color: "#f0945c", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
-          >
+          <button onClick={() => setShowQR((v) => !v)}
+            style={{ padding: "7px 14px", borderRadius: 999, border: "1px solid rgba(240,148,92,0.5)", background: showQR ? "rgba(240,148,92,0.2)" : "transparent", color: "#f0945c", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
             <QrIcon /> {showQR ? "Hide QR" : "Show QR"}
           </button>
-          <button
-            onClick={onClose}
-            style={{ padding: "7px 14px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "rgba(255,255,255,0.7)", fontSize: 13, cursor: "pointer" }}
-          >
+          <button onClick={onClose}
+            style={{ padding: "7px 14px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "rgba(255,255,255,0.7)", fontSize: 13, cursor: "pointer" }}>
             ✕ Exit
           </button>
         </div>
@@ -130,48 +192,84 @@ function PresentOverlay({ images, socket, studentUrl, onClose }) {
         {/* SLIDE */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", position: "relative" }}>
           <NavButton direction="left" onClick={prev} disabled={current === 0} />
-          <img
-            key={current}
-            src={images[current]}
-            alt={`Slide ${current + 1}`}
-            style={{ maxWidth: "100%", maxHeight: "calc(100vh - 130px)", objectFit: "contain", borderRadius: 8, boxShadow: "0 20px 60px rgba(0,0,0,0.6)", animation: "slideIn 0.2s ease-out" }}
-          />
+          <img key={current} src={images[current]} alt={`Slide ${current + 1}`}
+            style={{ maxWidth: "100%", maxHeight: "calc(100vh - 130px)", objectFit: "contain", borderRadius: 8, boxShadow: "0 20px 60px rgba(0,0,0,0.6)", animation: "slideIn 0.2s ease-out" }} />
           <NavButton direction="right" onClick={next} disabled={current === images.length - 1} />
         </div>
 
-        {/* QR PANEL */}
+        {/* RIGHT PANEL: QR + Questions stacked */}
         {showQR && (
-          <div style={{ width: 240, background: "rgba(255,255,255,0.04)", borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "28px 20px", gap: 16, flexShrink: 0 }}>
-            <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 600, textAlign: "center", letterSpacing: "0.03em" }}>
-              STUDENT ACCESS
-            </p>
+          <div style={{ width: 260, background: "rgba(255,255,255,0.03)", borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden" }}>
 
-            <div style={{ background: "white", borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", alignItems: "center", gap: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
-              {studentUrl ? (
-                <>
-                  <QRCodeCanvas value={studentUrl} size={164} fgColor="#1a1a1a" bgColor="#ffffff" level="M" />
-                  <span style={{ fontSize: 10, color: "#999", textAlign: "center", maxWidth: 164, wordBreak: "break-all", lineHeight: 1.4 }}>
-                    {studentUrl}
-                  </span>
-                </>
-              ) : (
-                <div style={{ width: 164, height: 164, display: "flex", alignItems: "center", justifyContent: "center", color: "#ccc", fontSize: 13 }}>
-                  Connecting…
-                </div>
+            {/* QR section */}
+            <div style={{ padding: "20px 20px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+              <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em" }}>STUDENT ACCESS</p>
+              <div style={{ background: "white", borderRadius: 12, padding: 12, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
+                {studentUrl
+                  ? <QRCodeCanvas value={studentUrl} size={140} fgColor="#1a1a1a" bgColor="#ffffff" level="M" />
+                  : <div style={{ width: 140, height: 140, display: "flex", alignItems: "center", justifyContent: "center", color: "#ccc", fontSize: 12 }}>Connecting…</div>
+                }
+              </div>
+              {studentUrl && (
+                <span style={{ fontSize: 9, color: "#888", textAlign: "center", wordBreak: "break-all", lineHeight: 1.4 }}>{studentUrl}</span>
               )}
+              {/* Slide dots */}
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "center" }}>
+                {images.map((_, i) => (
+                  <button key={i} onClick={() => setCurrent(i)}
+                    style={{ width: i === current ? 18 : 7, height: 7, borderRadius: 999, border: "none", background: i === current ? "#f0945c" : "rgba(255,255,255,0.2)", cursor: "pointer", transition: "all 0.2s", padding: 0 }} />
+                ))}
+              </div>
             </div>
 
-            <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11.5, textAlign: "center", lineHeight: 1.6 }}>
-              Scan to follow the<br />presentation on your device
-            </p>
+            {/* Questions section */}
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              {/* Questions header */}
+              <div style={{ padding: "12px 16px 8px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 600 }}>QUESTIONS</span>
+                  {pendingCount > 0 && (
+                    <span style={{ background: "#f0945c", color: "white", fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999 }}>
+                      {pendingCount}
+                    </span>
+                  )}
+                </div>
+                {pendingCount > 0 && (
+                  <button onClick={clearAll}
+                    style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", fontSize: 11, cursor: "pointer", padding: "2px 6px" }}>
+                    Clear all
+                  </button>
+                )}
+              </div>
 
-            {/* Dot indicators */}
-            <div style={{ display: "flex", gap: 5, flexWrap: "wrap", justifyContent: "center", marginTop: 4 }}>
-              {images.map((_, i) => (
-                <button key={i} onClick={() => setCurrent(i)}
-                  style={{ width: i === current ? 20 : 8, height: 8, borderRadius: 999, border: "none", background: i === current ? "#f0945c" : "rgba(255,255,255,0.2)", cursor: "pointer", transition: "all 0.2s", padding: 0 }}
-                />
-              ))}
+              {/* Question list */}
+              <div style={{ flex: 1, overflowY: "auto", padding: "0 10px 10px", display: "flex", flexDirection: "column", gap: 8 }}>
+                {questions.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "24px 0", color: "rgba(255,255,255,0.2)", fontSize: 12 }}>
+                    No questions yet
+                  </div>
+                ) : (
+                  questions.map((q) => (
+                    <div key={q.id}
+                      style={{
+                        background: landedIds.has(q.id) ? "rgba(240,148,92,0.08)" : "rgba(255,255,255,0.04)",
+                        border: landedIds.has(q.id) ? "1px solid rgba(240,148,92,0.5)" : "1px solid rgba(255,255,255,0.07)",
+                        borderRadius: 10, padding: "10px 12px", position: "relative",
+                        animation: landedIds.has(q.id) ? "landInSidebar 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards" : "none",
+                        boxShadow: landedIds.has(q.id) ? "0 0 16px rgba(240,148,92,0.15)" : "none",
+                        transition: "border 0.4s, background 0.4s, box-shadow 0.4s",
+                      }}>
+                      <p style={{ fontSize: 12.5, color: "rgba(255,255,255,0.85)", lineHeight: 1.5, marginRight: 18 }}>{q.text}</p>
+                      <p style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 5 }}>
+                        Slide {q.slideIndex + 1} · {new Date(q.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                      <button onClick={() => dismissQuestion(q.id)}
+                        style={{ position: "absolute", top: 8, right: 8, background: "none", border: "none", color: "rgba(255,255,255,0.25)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "2px 4px" }}
+                        title="Dismiss">✕</button>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -181,14 +279,25 @@ function PresentOverlay({ images, socket, studentUrl, onClose }) {
       <div style={{ display: "flex", gap: 6, padding: "8px 16px", overflowX: "auto", background: "rgba(0,0,0,0.4)", borderTop: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
         {images.map((img, i) => (
           <button key={i} onClick={() => setCurrent(i)}
-            style={{ border: i === current ? "2px solid #f0945c" : "2px solid transparent", borderRadius: 4, overflow: "hidden", cursor: "pointer", padding: 0, background: "none", flexShrink: 0, opacity: i === current ? 1 : 0.4, transition: "opacity 0.15s, border-color 0.15s" }}
-          >
+            style={{ border: i === current ? "2px solid #f0945c" : "2px solid transparent", borderRadius: 4, overflow: "hidden", cursor: "pointer", padding: 0, background: "none", flexShrink: 0, opacity: i === current ? 1 : 0.4, transition: "opacity 0.15s, border-color 0.15s" }}>
             <img src={img} alt={`Slide ${i + 1}`} style={{ height: 44, width: "auto", display: "block" }} />
           </button>
         ))}
       </div>
 
-      <style>{`@keyframes slideIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }`}</style>
+      <style>{`
+        @keyframes slideIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+        @keyframes bubbleFloat {
+          0%   { opacity: 0;   transform: translateX(-50%) translateY(0px)    scale(0.92); }
+          15%  { opacity: 1;   transform: translateX(-50%) translateY(-30px)  scale(1);    }
+          100% { opacity: 0;   transform: translateX(-50%) translateY(-220px) scale(0.9);  }
+        }
+        @keyframes landInSidebar {
+          0%   { opacity: 0; transform: translateX(20px) scale(0.92); }
+          60%  { transform: translateX(-3px) scale(1.02); }
+          100% { opacity: 1; transform: translateX(0) scale(1); }
+        }
+      `}</style>
     </div>
   );
 }
@@ -212,10 +321,16 @@ export default function LectureLife() {
   };
 
   const startPresenting = async () => {
-    const socket = io(STUDENT_SERVER_URL);
+    const socket = io(LOCAL_SERVER);
     socketRef.current = socket;
     socket.emit("upload-slides", images);
-    setStudentUrl(`${STUDENT_SERVER_URL}/student`);
+    try {
+      const res = await fetch(`${LOCAL_SERVER}/info`);
+      const { ip, port } = await res.json();
+      setStudentUrl(`http://${ip}:${port}/student`);
+    } catch {
+      setStudentUrl(`${LOCAL_SERVER}/student`);
+    }
     setPresentMode(true);
   };
 

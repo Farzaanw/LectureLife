@@ -2,7 +2,10 @@ import { mastra } from '../../index'
 import * as fs from 'fs'
 import * as path from 'path'
 
-export async function runExtractionAgent(imagePath: string) {
+const DEFAULT_EXTRACTION_PROMPT =
+  'Analyze this slide for Agent 2 handoff. Follow your required section format exactly. Prioritize factual accuracy and mark uncertainty clearly.'
+
+export async function runExtractionAgent(imagePath: string, prompt?: string) {
   const agent = mastra.getAgentById('extractionAgent_1')
 
   // Read the image and convert to base64
@@ -13,6 +16,7 @@ export async function runExtractionAgent(imagePath: string) {
   // Detect format from file extension
   const ext = path.extname(imagePath).toLowerCase()
   const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg'
+  const userPrompt = prompt?.trim() ? prompt : DEFAULT_EXTRACTION_PROMPT
 
   console.log(`Processing slide: ${absolutePath}`)
 
@@ -27,7 +31,7 @@ export async function runExtractionAgent(imagePath: string) {
         },
         {
           type: 'text',
-          text: 'Analyze this slide and give me a detailed structured summary.',
+          text: userPrompt,
         },
       ],
     },
@@ -42,10 +46,11 @@ export async function runExtractionAgent(imagePath: string) {
 
 // Run it directly with a test image
 const testImagePath = process.argv[2]
+const customPrompt = process.argv.slice(3).join(' ')
 
 if (!testImagePath) {
-  console.error('Please provide an image path: npx ts-node extractionRun.ts ./test-slide.png')
+  console.error('Please provide an image path: npx ts-node extractionRun.ts ./test-slide.png [optional prompt]')
   process.exit(1)
 }
 
-runExtractionAgent(testImagePath)
+runExtractionAgent(testImagePath, customPrompt)

@@ -1,17 +1,53 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
-import * as fs from 'fs';
-import * as path from 'path';
+
+function extractPresentationId(slideshowUrl: string): string {
+	const match = slideshowUrl.match(/\/presentation\/d\/([a-zA-Z0-9_-]+)/i);
+	if (!match?.[1]) {
+		throw new Error('Invalid Google Slides URL. Expected format: https://docs.google.com/presentation/d/<id>/...');
+	}
+	return match[1];
+}
+
+async function getFirstSlidePageId(presentationId: string): Promise<string> {
+	const htmlUrl = `https://docs.google.com/presentation/d/${presentationId}/htmlpresent`;
+	const response = await fetch(htmlUrl);
+	if (!response.ok) {
+		throw new Error(`Unable to access slideshow HTML view (${response.status})`);
+	}
+
+	const html = await response.text();
+	const pageIdMatch = html.match(/pageid=([a-zA-Z0-9_-]+)/i);
+	if (!pageIdMatch?.[1]) {
+		throw new Error('Could not detect first slide page ID. Ensure the slideshow is shared as viewable.');
+	}
+
+	return pageIdMatch[1];
+}
+
+async function fetchSlideAsBase64(slideshowUrl: string): Promise<string> {
+	const presentationId = extractPresentationId(slideshowUrl);
+	const pageId = await getFirstSlidePageId(presentationId);
+	const exportUrl = `https://docs.google.com/presentation/d/${presentationId}/export/png?pageid=${pageId}`;
+
+	const response = await fetch(exportUrl);
+	if (!response.ok) {
+		throw new Error(`Unable to export slide image (${response.status})`);
+	}
+
+	const imageBytes = await response.arrayBuffer();
+	return Buffer.from(imageBytes).toString('base64');
+}
 
 const runAgent1 = createStep({
 	id: 'run-agent-1-extraction',
 	description: 'Runs Agent 1 to extract structured slide data',
 	inputSchema: z.object({
-		imagePath: z.string().describe('Path to slide image (png, jpg, jpeg)'),
+		slideshowUrl: z.string().url().describe('Google Slides URL'),
 		prompt: z.string().optional().describe('Optional override prompt for Agent 1'),
 	}),
 	outputSchema: z.object({
-		imagePath: z.string(),
+		slideshowUrl: z.string(),
 		agent1Output: z.string(),
 	}),
 	execute: async ({ inputData, mastra }) => {
@@ -24,12 +60,8 @@ const runAgent1 = createStep({
 			throw new Error('Agent 1 not found');
 		}
 
-		const absolutePath = path.resolve(inputData.imagePath);
-		const imageBuffer = fs.readFileSync(absolutePath);
-		const base64Image = imageBuffer.toString('base64');
-
-		const ext = path.extname(absolutePath).toLowerCase();
-		const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
+		const base64Image = await fetchSlideAsBase64(inputData.slideshowUrl);
+		const mimeType: 'image/png' = 'image/png';
 
 		const defaultPrompt =
 			'Analyze this slide and output structured extraction that Agent 2 can directly use.';
@@ -53,7 +85,7 @@ const runAgent1 = createStep({
 		]);
 
 		return {
-			imagePath: inputData.imagePath,
+			slideshowUrl: inputData.slideshowUrl,
 			agent1Output: response.text,
 		};
 	},
@@ -63,7 +95,7 @@ const runAgent2 = createStep({
 	id: 'run-agent-2-enhancement',
 	description: 'Passes Agent 1 output into Agent 2 to generate enhancement plan',
 	inputSchema: z.object({
-		imagePath: z.string(),
+		slideshowUrl: z.string(),
 		agent1Output: z.string(),
 	}),
 	outputSchema: z.object({
@@ -83,7 +115,7 @@ const runAgent2 = createStep({
 		const response = await agent2.generate([
 			{
 				role: 'user',
-				content: `You are receiving Agent 1 extraction output. Use it as your primary input to create the slide enhancement plan.\n\nAgent 1 Output:\n${inputData.agent1Output}`,
+				content: `You are receiving Agent 1 extraction output. Use it as your primary input for agent 2.\n\nAgent 1 Output:\n${inputData.agent1Output}`,
 			},
 		]);
 
@@ -97,7 +129,7 @@ const runAgent2 = createStep({
 const extractionWorkflow = createWorkflow({
 	id: 'extraction-workflow',
 	inputSchema: z.object({
-		imagePath: z.string(),
+		slideshowUrl: z.string().url(),
 		prompt: z.string().optional(),
 	}),
 	outputSchema: z.object({

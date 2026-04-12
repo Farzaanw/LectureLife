@@ -1,0 +1,22 @@
+# services/doc-processor/docker-compose.yml
+# Run locally with: docker compose up --build
+
+version: "3.9"
+
+services:
+  doc-processor:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - OUTPUT_DIR=/tmp/lecturelife/slides
+      - MAX_FILE_SIZE_MB=50
+    volumes:
+      # Mount local slides directory so Agent 1 can read the generated images
+      - ./slides:/tmp/lecturelife/slides
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

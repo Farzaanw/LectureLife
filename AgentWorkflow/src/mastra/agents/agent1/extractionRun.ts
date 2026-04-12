@@ -1,9 +1,9 @@
-import { mastra } from '../../index'
+import { extractionAgent } from './extractionAgent'
 import * as fs from 'fs'
 import * as path from 'path'
 
 export async function runExtractionAgent(imagePath: string) {
-  const agent = mastra.getAgentById('extractionAgent_1')
+  const agent = extractionAgent
 
   // Read the image and convert to base64
   const absolutePath = path.resolve(imagePath)
@@ -36,16 +36,15 @@ export async function runExtractionAgent(imagePath: string) {
   console.log('\n=== EXTRACTION SUMMARY ===\n')
   console.log(response.text)
 
-  // Return the summary so Agent 2 can use it later
   return response.text
 }
 
-// Run it directly with a test image
-const testImagePath = process.argv[2]
-
-if (!testImagePath) {
-  console.error('Please provide an image path: npx ts-node extractionRun.ts ./test-slide.png')
-  process.exit(1)
+// Only runs when called directly — not on import
+if (process.argv[1] && process.argv[1].includes('extractionRun')) {
+  const testImagePath = process.argv[2]
+  if (!testImagePath) {
+    console.error('Usage: npx tsx src/mastra/agents/agent1/extractionRun.ts ./test-slide.png')
+    process.exit(1)
+  }
+  runExtractionAgent(testImagePath)
 }
-
-runExtractionAgent(testImagePath)

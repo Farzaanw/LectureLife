@@ -1,48 +1,49 @@
-// Agents Imported
-import { extractionAgent as extractionAgent_1 } from './agents/agent1/extractionAgent';
-import { extractionAgent as extractionAgent_2 } from './agents/agent2/extractionAgent';
-// ---------------------------
-
-import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
-import { LibSQLStore } from '@mastra/libsql';
-import { DuckDBStore } from "@mastra/duckdb";
-import { MastraCompositeStore } from '@mastra/core/storage';
-import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
-import { weatherWorkflow } from './workflows/weather-workflow';
-import { weatherAgent } from './agents/weather-agent';
-import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } from './scorers/weather-scorer';
+import { extractionAgent } from './agents/agent1/extractionAgent'
+import { lessonDesignerAgent } from './agents/agent2/lessonDesignerAgent'
+import { slideTransformationWorkflow } from './workflows/slideTransformationWorkflow'
+import { weatherWorkflow } from './workflows/weather-workflow'
+import { Mastra } from '@mastra/core/mastra'
+import { PinoLogger } from '@mastra/loggers'
+import { LibSQLStore } from '@mastra/libsql'
+import { DuckDBStore } from '@mastra/duckdb'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability'
+import { weatherAgent } from './agents/weather-agent'
+import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } from './scorers/weather-scorer'
 
 export const mastra = new Mastra({
-  workflows: { weatherWorkflow },
-  agents: { weatherAgent, extractionAgent_1, extractionAgent_2 },
-  scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },
+  workflows: {
+    weatherWorkflow,
+    slideTransformationWorkflow,
+  },
+  agents: {
+    weatherAgent,
+    extractionAgent,
+    lessonDesignerAgent,
+  },
+  scorers: {
+    toolCallAppropriatenessScorer,
+    completenessScorer,
+    translationScorer,
+  },
   storage: new MastraCompositeStore({
     id: 'composite-storage',
     default: new LibSQLStore({
-      id: "mastra-storage",
-      url: "file:./mastra.db",
+      id: 'mastra-storage',
+      url: 'file:./mastra.db',
     }),
     domains: {
       observability: await new DuckDBStore().getStore('observability'),
-    }
+    },
   }),
-  logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
-  }),
+  logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
   observability: new Observability({
     configs: {
       default: {
         serviceName: 'mastra',
-        exporters: [
-          new DefaultExporter(), // Persists traces to storage for Mastra Studio
-          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
-        ],
-        spanOutputProcessors: [
-          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
-        ],
+        exporters: [new DefaultExporter(), new CloudExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },
   }),
-});
+})

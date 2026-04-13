@@ -314,7 +314,7 @@ The resolution was replacing the default `anthropic` import with `createAnthropi
 
 ## Team
 
-Built at **[Hackathon Name]** — April 2026
+Built at HackUP — April 2026
 
 ---
 
